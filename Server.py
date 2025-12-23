@@ -11,8 +11,8 @@ def listener_connection(ip, port)->socket.socket:
     return sock
 
 ## sending window size limitations
-def response(socket:socket.socket,file:str, size:int = 1024,win_size = 4,timeout=4,dynamic:bool = False ):
-    response = {"message":file,"maximum_msg_size":size,"window_size":win_size,"timeout":timeout,"dynamic_msg_size":dynamic}
+def response(socket:socket.socket,file:str, size:int = 1024,win_size = 4,dynamic:bool = False ):
+    response = {"message":file,"maximum_msg_size":size,"window_size":win_size,"dynamic_msg_size":dynamic}
     socket.send(json.dumps(response).encode())
 
 ## checks if a file's content is of valid format
@@ -39,12 +39,11 @@ def receive_config_request(client_socket):
         message_file = input("Please enter the file path: ")
         msg_size = input("Please enter the message size: ")
         window_size = input("Please enter the window size: ")
-        timeout = input("Please enter the timeout: ")
         dynamic_msg_size = input("Please enter the dynamic message size [T/F]: ")
         dynamic_msg_size = True if dynamic_msg_size == "T" or dynamic_msg_size=="t" else False
 
         ## assembling the dictionary response
-        conf = {"message": message_file, "maximum_msg_size":int(msg_size), "window_size": int(window_size), "timeout": int(timeout),
+        conf = {"message": message_file, "maximum_msg_size":int(msg_size), "window_size": int(window_size),
                 "dynamic_message_size": dynamic_msg_size}
         ## send response JSON
         client_socket.send(json.dumps(conf).encode())
@@ -74,24 +73,51 @@ def send_ack(socket:socket.socket,ack:int,dynamic:bool = False):
 
 #reciving message
 def recv_msg(socket:socket.socket,config):
+
+    ##init buffers and variabels
     buffer = b""
     message = ""
+    expected_seq=0
+
+    ##loose packet number:
+    lost_packet = random.randint(0,12)
+    lost = False
+
     while True:
+
+        ##buffering the response
         buffer += socket.recv(4096)
 
+        ## JSON sequences seperated by \n
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
             data = json.loads(line.decode())
+
+            ## extracting the data
             msg = data["message"]
             seq = data["seq"]
             is_last = data["is_last"]
-            message += msg
-            print("got message:", msg)
-            send_ack(socket, seq,config["dynamic_message_size"])
-            print("sending ack",seq)
 
+            ##if the packet number is the one that we want to "loose"
+            ##send ack for the prev package
+            ##let the client manage the loss
+            if seq == 4 and not lost:
+                print("stopped receiving")
+                send_ack(socket, expected_seq-1, config["dynamic_message_size"])
+                lost = True
+                continue
+
+            ## if the ack we received is the next in sequence (or more)
+            if seq==expected_seq:
+                expected_seq +=1
+                print("Packet received:", data)
+                send_ack(socket, seq, config["dynamic_message_size"])
+                message += msg
+            ## send last received ack
+            else:
+                send_ack(socket, expected_seq-1, config["dynamic_message_size"])
+            ## if the message is the last one in sequence
             if is_last:
-                print("last arrived")
                 return message
 
 def main():
