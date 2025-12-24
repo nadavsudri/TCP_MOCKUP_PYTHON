@@ -12,7 +12,10 @@ from collections import deque
 
 ##enjoy!
 
-
+def open_file_json(file:str):
+    with open(file) as f:
+        data=  f.read()
+        return json.dumps(data)
 
 ## start of connection (3way handshake)
 def start_connection(socket:socket.socket,port=5555,ip="127.0.0.1"):
@@ -165,7 +168,6 @@ def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
             window = [pkt for pkt in window if json.loads(pkt.decode())["seq"] >= last_ack]
             timer = time.monotonic()
         elapsed = time.monotonic() - timer
-        print("elapsed:", elapsed, "timeout:", timeout)
 
         ##if the new size flag is true (new size has been asked for)
         ##and the window is empty, change the sizeing and set the flags to false.
@@ -189,11 +191,24 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     start_connection(sock)
     work_type =input("File or Type [F/T] >>>  ")
-    timeout = int(input("Timeout (seconds) >>>  "))
+    if work_type=="t" or work_type=="T":
+        timeout = int(input("Timeout (seconds) >>>  "))
+
+
     config = ask_for_config(sock, work_type)
     while True:
-        data = input("> ")
-        send_message(sock,data,config,timeout)
+        if work_type=="f" or work_type=="F":
+            file = json.loads(open_file_json(input("Enter file path >>>  ")))
+            if isinstance(file, str):
+                file = json.loads(file)
+            data = file["message"]
+            timeout = file["timeout"]
+            send_message(sock,data,config,timeout)
+
+
+        else:
+            data = input(">>> ")
+            send_message(sock,data,config,timeout)
 
 if __name__ == "__main__":
     main()

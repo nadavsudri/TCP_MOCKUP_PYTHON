@@ -31,12 +31,17 @@ def receive_config_request(client_socket):
     if config_request["type"] == "F" or config_request["type"] == "f":
         # if passed using a file
         response = open_file_json(input("Please enter the file path: "))
+
         client_socket.send(response.encode())
-        return json.loads(response)
+        response = json.loads(response)
+        if isinstance(response, str):
+            return json.loads(response)
+        else:
+            return response
     if config_request["type"] == "T" or config_request["type"] == "t":
 
         ## requesting from user for parameters
-        message_file = input("Please enter the file path: ")
+        message_file = ""
         msg_size = input("Please enter the message size: ")
         window_size = input("Please enter the window size: ")
         dynamic_msg_size = input("Please enter the dynamic message size [T/F]: ")
