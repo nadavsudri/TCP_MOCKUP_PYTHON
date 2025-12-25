@@ -32,6 +32,7 @@ def receive_config_request(client_socket):
         # if passed using a file
         response = open_file_json(input("Please enter the file path: "))
 
+
         client_socket.send(response.encode())
         response = json.loads(response)
         if isinstance(response, str):
@@ -83,6 +84,7 @@ def recv_msg(socket:socket.socket,config):
     buffer = b""
     message = ""
     expected_seq=0
+    last_seq = 0
 
     ##loose packet number:
     lost_packet = random.randint(0,12)
@@ -107,22 +109,27 @@ def recv_msg(socket:socket.socket,config):
             ##send ack for the prev package
             ##let the client manage the loss
             if seq == 4 and not lost:
-                print("stopped receiving")
+                print("stopped receiving",expected_seq-1)
                 send_ack(socket, expected_seq-1, config["dynamic_message_size"])
+
                 lost = True
                 continue
 
             ## if the ack we received is the next in sequence (or more)
-            if seq==expected_seq:
+            elif seq==expected_seq:
                 expected_seq +=1
+                print(expected_seq)
                 print("Packet received:", data)
                 send_ack(socket, seq, config["dynamic_message_size"])
                 message += msg
             ## send last received ack
             else:
                 send_ack(socket, expected_seq-1, config["dynamic_message_size"])
+                print("sent from else",expected_seq-1)
             ## if the message is the last one in sequence
             if is_last:
+                last_seq = seq
+            if is_last and last_seq ==expected_seq-1:
                 return message
 
 def main():
@@ -154,6 +161,7 @@ def main():
     #loop as long connection is established
     while is_connected:
         data = recv_msg(client_socket,config)
+        print("called again")
         if not data:
                 continue
         # if data =="WIN_SIZE":

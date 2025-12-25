@@ -199,6 +199,7 @@ def main():
     while True:
         if work_type=="f" or work_type=="F":
             file = json.loads(open_file_json(input("Enter file path >>>  ")))
+
             if isinstance(file, str):
                 file = json.loads(file)
             data = file["message"]
