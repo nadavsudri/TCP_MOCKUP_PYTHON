@@ -1,8 +1,29 @@
 import json
 import socket,json
 import random
+import time
 
 """I would oop this way better but its not necessary"""
+
+
+###  server constants  ####
+change_rate=None
+time_since_change = 0
+
+## mimics the servers decision whether to increase or decrease msg size based on the conjection
+def do_i_need_to_change_size(windowsize:int)-> bool:
+
+    global change_rate
+    global time_since_change
+    change_rate = 3*windowsize
+    if time_since_change>=change_rate:
+        time_since_change = 0
+        return True
+    else:
+        print("time. to change size", time_since_change)
+        time_since_change += 1
+        return False
+
 ## connecting a socket to given ip and port
 def listener_connection(ip, port)->socket.socket:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -14,10 +35,6 @@ def listener_connection(ip, port)->socket.socket:
 def response(socket:socket.socket,file:str, size:int = 1024,win_size = 4,dynamic:bool = False ):
     response = {"message":file,"maximum_msg_size":size,"window_size":win_size,"dynamic_msg_size":dynamic}
     socket.send(json.dumps(response).encode())
-
-## checks if a file's content is of valid format
-def is_format(data:str) -> bool:
-    pass
 
 ### Receiving the first confing request
 def receive_config_request(client_socket):
@@ -57,11 +74,7 @@ def receive_config_request(client_socket):
     return None
 
 def random_size():
-    return random.randint(1,8)
-
-### receive a message from the client
-def receive_message(client_socket):
-    pass
+    return random.randint(3,10)
 
 ## opening a file containing JSON format
 def open_file_json(file:str):
@@ -80,20 +93,29 @@ def send_ack(socket:socket.socket,ack:int,dynamic:bool = False):
 #reciving message
 def recv_msg(socket:socket.socket,config):
 
+    ##for testing
+    lose_packet = True
+
     ##init buffers and variabels
     buffer = b""
     message = ""
     expected_seq=0
     last_seq = 0
-
+    dynamic = config["dynamic_message_size"]
     ##loose packet number:
     lost_packet = random.randint(0,12)
     lost = False
+
 
     while True:
 
         ##buffering the response
         buffer += socket.recv(4096)
+
+        if dynamic and do_i_need_to_change_size(config["window_size"]):
+            config["dynamic_message_size"] = True
+        else:
+            config["dynamic_message_size"] = False
 
         ## JSON sequences seperated by \n
         while b"\n" in buffer:
@@ -102,13 +124,14 @@ def recv_msg(socket:socket.socket,config):
 
             ## extracting the data
             msg = data["message"]
+
             seq = data["seq"]
             is_last = data["is_last"]
 
             ##if the packet number is the one that we want to "loose"
             ##send ack for the prev package
             ##let the client manage the loss
-            if seq == 4 and not lost:
+            if seq == 4 and not lost and lose_packet:
                 print("stopped receiving",expected_seq-1)
                 send_ack(socket, expected_seq-1, config["dynamic_message_size"])
 
@@ -119,14 +142,16 @@ def recv_msg(socket:socket.socket,config):
             elif seq==expected_seq:
                 expected_seq +=1
                 print(expected_seq)
-                print("Packet received:", data)
+
                 send_ack(socket, seq, config["dynamic_message_size"])
+
                 message += msg
             ## send last received ack
             else:
                 send_ack(socket, expected_seq-1, config["dynamic_message_size"])
                 print("sent from else",expected_seq-1)
             ## if the message is the last one in sequence
+            ## makes sure that the method will run until the last message is acked
             if is_last:
                 last_seq = seq
             if is_last and last_seq ==expected_seq-1:

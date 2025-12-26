@@ -1,8 +1,6 @@
 import json
 import socket
-import sys
 import time
-from collections import deque
 
 ### this is the implementation for ASS3 in RESHATOT course
 ### this code is representing a reliable data stream as learned in the course
@@ -60,13 +58,6 @@ def ask_for_config(socket:socket.socket, source):
         data_rcv = json.loads(data_rcv)
     return data_rcv
 
-#segmenting the data by @num sizes (len//maxmsgsize)
-def segment_msg(data: str, max_len: int):
-    return [data[i:i+max_len] for i in range(0, len(data), max_len)]
-
-def send_indexed(socket:socket.socket,str:str,index:int):
-    data = {"data":str,"index":index}
-
 ##add the headers attached in "m"
 ## format into a string representing a JSON object
 def add_headers(source:bytes,m,is_last:bool):
@@ -77,13 +68,14 @@ def add_headers(source:bytes,m,is_last:bool):
     :param is_last: 
     :return: bytes
     """""
-    msg_with_headers = {"message":source.decode(),"seq":m,"is_last":is_last}
+    msg_with_headers = {"message":source.decode(errors="replace"),"seq":m,"is_last":is_last}
     return json.dumps(msg_with_headers).encode("utf-8")
-
 
 def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
     ##this method is the main implementation of the reliable data transform mechanism
     ##as studied in RESHATOT TIKSHORET course.
+
+
 
     #don't do anything if no data was sent
     if not source:
@@ -100,17 +92,22 @@ def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
     last_sent = 0
     last_ack = 0
     bytes_sent = 0
+    ## setting the timout of the socket to NOT be stuck in an endless reading
     sock.settimeout(0.1)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     new_size = False
     pending_size = None
     window=[]
     timer = time.time()
 
+
     #the main loop of the method
     while True:
         #send the unsent packets in the window
         first = True
-        while last_sent-last_ack < window_size and not new_size:
+        while last_sent-last_ack < window_size:
+            if new_size:
+                break
             ##if the given size is new -> don't send new messages
             if bytes_sent >= len(encoded_data):
                 break
@@ -133,41 +130,39 @@ def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
             window.append(to_send)
             ## sending the message via the socket
             sock.send(to_send + b"\n")
+            ### proccess the ack
+            time.sleep(0.001)
+            print("client sent: ", to_send)
             #updating the total bytes_sent
             bytes_sent += len(chunk)
             last_sent += 1
-
-        ### if the message sent completly -> return
-        if bytes_sent == len(encoded_data) and last_ack == last_sent:
-            return
-
-        #get the responses
-        res = recv_json(sock)
-        if res is None:
-            pass
-        else:
+        while True:
+            #get the responses
+            res = recv_json(sock)
+            if res is None:
+                break
             ack = res["ack"]
-            print("Server sent Ack: ", ack)
+            print("Server sent Ack: ", res)
 
-        #  if the response from the server included the flag, change the msg size
-        if res is None:
-            pass
-        else:
             if res["dynamic_message_size"]:
                 dynamic = res["dynamic_message_size"]
                 if max_len != res["message_size"]:
                     new_size = True
                     # saving the new size for when the window is empty
                     pending_size = res["message_size"]
-        if last_ack == last_sent:
-            new_size = False
 
-        #if the received ack is bigger than the last acked packet -> move the window
-        if ack+1>last_ack:
-            last_ack = ack+1
-            window = [pkt for pkt in window if json.loads(pkt.decode())["seq"] >= last_ack]
-            timer = time.monotonic()
-        elapsed = time.monotonic() - timer
+            # if the received ack is bigger than the last acked packet -> move the window
+            if ack + 1 > last_ack:
+                last_ack = ack + 1
+                window = [pkt for pkt in window if json.loads(pkt.decode())["seq"] >= last_ack]
+                timer = time.monotonic()
+
+        ### if the message sent completly -> return
+        if bytes_sent == len(encoded_data) and last_ack == last_sent:
+            return
+
+        #  if the response from the server included the flag, change the msg size
+
 
         ##if the new size flag is true (new size has been asked for)
         ##and the window is empty, change the sizeing and set the flags to false.
@@ -179,34 +174,44 @@ def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
 
         ## if you haven't received a moving window ack till timeout -> resend the window
         ## after the retransmitting, the clock is set to 0 again
-
         if time.monotonic() - timer > timeout:
             print("timeout")
             for unacked in window:
                 sock.send(unacked + b"\n")
             timer = time.monotonic()
 
-
 def main():
+
+    ## opening the socket and starting the connection
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     start_connection(sock)
+
+    ##letting the user choose if to work with typing or files
     work_type =input("File or Type [F/T] >>>  ")
     if work_type=="t" or work_type=="T":
         timeout = int(input("Timeout (seconds) >>>  "))
 
-
+    ## ask the server for configuration (negotiation)
     config = ask_for_config(sock, work_type)
+
+    # start sending messages
     while True:
+
+        ## proccess file from user input
         if work_type=="f" or work_type=="F":
             file = json.loads(open_file_json(input("Enter file path >>>  ")))
-
             if isinstance(file, str):
                 file = json.loads(file)
-            data = file["message"]
+            try:
+                read = open(file["message"])
+                data = read.read()
+            except json.decoder.JSONDecodeError:
+                data = file["message"]
+
             timeout = file["timeout"]
             send_message(sock,data,config,timeout)
 
-
+        ## not a file -> using input from user as a message
         else:
             data = input(">>> ")
             send_message(sock,data,config,timeout)
