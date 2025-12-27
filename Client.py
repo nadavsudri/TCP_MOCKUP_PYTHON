@@ -20,14 +20,11 @@ def start_connection(socket:socket.socket,port=5555,ip="127.0.0.1"):
     socket.connect((ip, port))
     ## send SIN message
     socket.send("SIN".encode())
-
     ##recive SIN/ACK
     data_rcv = socket.recv(1024).decode()
     if data_rcv == "SIN/ACK":
         socket.send("ACK".encode())
     return True # return true to verify an establishment.
-
-
 ### this method recives a socket, and reciving using recv a JSON object
 ### collected using chunking
 recv_buffer = b""
@@ -74,9 +71,6 @@ def add_headers(source:bytes,m,is_last:bool):
 def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
     ##this method is the main implementation of the reliable data transform mechanism
     ##as studied in RESHATOT TIKSHORET course.
-
-
-
     #don't do anything if no data was sent
     if not source:
         return
@@ -142,7 +136,7 @@ def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
             if res is None:
                 break
             ack = res["ack"]
-            print("Server sent Ack: ", res)
+            print("Server sent Ack: ", ack)
 
             if res["dynamic_message_size"]:
                 dynamic = res["dynamic_message_size"]
@@ -175,7 +169,7 @@ def send_message(sock:socket.socket, source:str, config:dict, timeout:int):
         ## if you haven't received a moving window ack till timeout -> resend the window
         ## after the retransmitting, the clock is set to 0 again
         if time.monotonic() - timer > timeout:
-            print("timeout")
+            print("Timeout...")
             for unacked in window:
                 sock.send(unacked + b"\n")
             timer = time.monotonic()
@@ -207,10 +201,8 @@ def main():
                 data = read.read()
             except json.decoder.JSONDecodeError:
                 data = file["message"]
-
             timeout = file["timeout"]
             send_message(sock,data,config,timeout)
-
         ## not a file -> using input from user as a message
         else:
             data = input(">>> ")

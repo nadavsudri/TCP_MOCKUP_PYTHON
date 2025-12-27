@@ -12,7 +12,6 @@ time_since_change = 0
 
 ## mimics the servers decision whether to increase or decrease msg size based on the conjection
 def do_i_need_to_change_size(windowsize:int)-> bool:
-
     global change_rate
     global time_since_change
     change_rate = 3*windowsize
@@ -32,7 +31,7 @@ def listener_connection(ip, port)->socket.socket:
     return sock
 
 ## sending window size limitations
-def response(socket:socket.socket,file:str, size:int = 1024,win_size = 4,dynamic:bool = False ):
+def response(socket:socket.socket,file:str, size:int = 1024,win_size = 4,dynamic:bool = False):
     response = {"message":file,"maximum_msg_size":size,"window_size":win_size,"dynamic_msg_size":dynamic}
     socket.send(json.dumps(response).encode())
 
@@ -132,7 +131,6 @@ def recv_msg(socket:socket.socket,config):
             ##send ack for the prev package
             ##let the client manage the loss
             if seq == 4 and not lost and lose_packet:
-                print("stopped receiving",expected_seq-1)
                 send_ack(socket, expected_seq-1, config["dynamic_message_size"])
 
                 lost = True
@@ -141,15 +139,12 @@ def recv_msg(socket:socket.socket,config):
             ## if the ack we received is the next in sequence (or more)
             elif seq==expected_seq:
                 expected_seq +=1
-                print(expected_seq)
-
                 send_ack(socket, seq, config["dynamic_message_size"])
 
                 message += msg
             ## send last received ack
             else:
                 send_ack(socket, expected_seq-1, config["dynamic_message_size"])
-                print("sent from else",expected_seq-1)
             ## if the message is the last one in sequence
             ## makes sure that the method will run until the last message is acked
             if is_last:
@@ -186,11 +181,10 @@ def main():
     #loop as long connection is established
     while is_connected:
         data = recv_msg(client_socket,config)
-        print("called again")
         if not data:
                 continue
         # if data =="WIN_SIZE":
                 # response(client_socket,)#incomplete!!
-        print("Received: ", data)
+        print("Server Received: ", data)
 
 main()
