@@ -1,2 +1,0 @@
-{"message": "/Users/nadavsudri/Desktop/School _Study/message_for_ass3.txt"
-,"timeout": 2}
