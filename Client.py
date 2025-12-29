@@ -10,6 +10,16 @@ import time
 
 ##enjoy!
 
+def finish_communication(socket:socket.socket):
+    socket.send("FIN".encode())
+    response=socket.recv(1024)
+    if response:
+        response=response.decode()
+        if response=="ACK":
+            return True
+    return False
+
+
 def open_file_json(file:str):
     with open(file) as f:
         data=  f.read()
@@ -190,10 +200,18 @@ def main():
 
     # start sending messages
     while True:
-
         ## proccess file from user input
         if work_type=="f" or work_type=="F":
-            file = json.loads(open_file_json(input("Enter file path >>>  ")))
+
+            ##detects end of communication
+            path = input("Enter file path >>>  ")
+            if path =="/exit":
+                if finish_communication(sock):
+                    print("Connection closed \n")
+                    print("socket closed \n")
+                    sock.close()
+                    break
+            file = json.loads(open_file_json())
             if isinstance(file, str):
                 file = json.loads(file)
             try:
@@ -206,7 +224,17 @@ def main():
         ## not a file -> using input from user as a message
         else:
             data = input(">>> ")
+            if data =="/exit":
+
+                if finish_communication(sock):
+                    print("Connection closed \n")
+                    print("socket closed \n")
+                    sock.close()
+                    break
+                else:
+                    print("Connection not closed; Error \n")
             send_message(sock,data,config,timeout)
+
 
 if __name__ == "__main__":
     main()
